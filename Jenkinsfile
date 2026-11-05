@@ -36,6 +36,7 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh 'docker compose down || true'
+                sh 'docker rm -f user-service product-service order-service || true'
                 sh 'docker compose up -d'
             }
         }
