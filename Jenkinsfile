@@ -1,6 +1,11 @@
 pipeline {
     agent any
 
+    environment {
+        AWS_REGION = 'us-east-1'
+        AWS_ACCOUNT_ID = '116248807916'
+    }
+
     stages {
 
         stage('Checkout') {
@@ -9,35 +14,54 @@ pipeline {
             }
         }
 
-        stage('Build User Service') {
+        stage('ECR Login') {
             steps {
-                sh 'docker build -t user-service:v1 user-service/'
+                sh '''
+                aws ecr get-login-password --region $AWS_REGION | \
+                docker login --username AWS --password-stdin \
+                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+                '''
             }
         }
 
-        stage('Build Product Service') {
+        stage('Build Images') {
             steps {
-                sh 'docker build -t product-service:v1 product-service/'
+                sh '''
+                docker build -t user-service:v1 user-service/
+                docker build -t product-service:v1 product-service/
+                docker build -t order-service:v1 order-service/
+                '''
             }
         }
 
-        stage('Build Order Service') {
+        stage('Tag Images') {
             steps {
-                sh 'docker build -t order-service:v1 order-service/'
+                sh '''
+                docker tag user-service:v1 $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-service:v1
+                docker tag product-service:v1 $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/product-service:v1
+                docker tag order-service:v1 $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/order-service:v1
+                '''
             }
         }
 
-        stage('Verify Images') {
+        stage('Push To ECR') {
             steps {
-                sh 'docker images'
+                sh '''
+                docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/user-service:v1
+
+                docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/product-service:v1
+
+                docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/order-service:v1
+                '''
             }
         }
 
         stage('Deploy') {
             steps {
-                sh 'docker compose down || true'
-                sh 'docker rm -f user-service product-service order-service || true'
-                sh 'docker compose up -d'
+                sh '''
+                docker compose down || true
+                docker compose up -d
+                '''
             }
         }
 
